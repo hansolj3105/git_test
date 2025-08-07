@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>대화형 KNN 알고리즘 탐험</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Calm Harmony -->
+    <!-- Application Structure Plan: A single-page, thematic, interactive journey. The structure is not linear like the report but is organized by core concepts to facilitate hands-on learning. 1. Intro: A simple analogy. 2. What is KNN?: Interactive canvas to show the basic idea. 3. Find K: A slider and canvas to demonstrate the bias-variance tradeoff (over/underfitting) and an elbow method chart. 4. Measure Distance: Interactive canvas comparing Euclidean and Manhattan distance. 5. Scaling: Visual demo of why scaling is crucial. 6. Decision Method: Tabs for Classification (voting) vs. Regression (averaging). 7. Use Cases: Interactive cards. 8. Conclusion: A clear pro/con summary. This structure was chosen to transform passive reading into active exploration, making abstract concepts tangible and memorable for a high-school audience. -->
+    <!-- Visualization & Content Choices: 
+        - What is KNN?: Goal: Inform. Method: Custom Canvas drawing. Interaction: Static visualization. Justification: A simple visual is more intuitive than text for the core concept. Library: Vanilla JS Canvas.
+        - Find K: Goal: Compare/Change. Method: Canvas scatter plot + Chart.js line chart. Interaction: User-controlled slider for K. Justification: Directly demonstrates the critical impact of the K hyperparameter on model complexity and error. Library: Vanilla JS Canvas, Chart.js.
+        - Measure Distance: Goal: Compare. Method: Custom Canvas drawing. Interaction: Buttons to switch metrics. Justification: Visually contrasts the two main distance formulas, making them concrete. Library: Vanilla JS Canvas.
+        - Data Scaling: Goal: Inform. Method: Custom Canvas scatter plot. Interaction: Button to toggle scaling. Justification: Shows the dramatic effect of unscaled features, proving the necessity of this preprocessing step. Library: Vanilla JS Canvas.
+        - Use Cases: Goal: Organize/Inform. Method: HTML/CSS cards. Interaction: Click/hover to reveal details. Justification: A modern, engaging way to present case studies without cluttering the UI. Library: HTML/CSS/JS.
+        - Conclusion: Goal: Inform. Method: HTML/CSS two-column layout. Interaction: Static. Justification: Provides a clear, final summary of the algorithm's strengths and weaknesses. Library: HTML/CSS.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #F8F7F4; color: #333333; }
+        .nav-button { transition: all 0.3s ease; }
+        .nav-button:hover, .nav-button.active { color: #E8A87C; transform: translateY(-2px); }
+        .card { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+        .interactive-canvas { border: 1px solid #e2e8f0; border-radius: 0.5rem; background-color: white; }
+        .chart-container { position: relative; width: 100%; max-width: 600px; margin-left: auto; margin-right: auto; height: 300px; max-height: 400px; }
+        @media (min-width: 768px) { .chart-container { height: 350px; } }
+        .tab.active { border-color: #E8A87C; color: #E8A87C; font-weight: bold; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <header class="bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+        <nav class="container mx-auto px-6 py-3 flex justify-between items-center">
+            <h1 class="text-xl font-bold text-gray-800">KNN 알고리즘 탐험 🗺️</h1>
+            <div class="hidden md:flex space-x-8">
+                <a href="#intro" class="nav-button text-gray-600">소개</a>
+                <a href="#find-k" class="nav-button text-gray-600">K 찾기</a>
+                <a href="#distance" class="nav-button text-gray-600">거리 측정</a>
+                <a href="#decision" class="nav-button text-gray-600">최종 결정</a>
+                <a href="#cases" class="nav-button text-gray-600">사용 사례</a>
+                <a href="#conclusion" class="nav-button text-gray-600">최종 정리</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto px-6 py-12">
+
+        <section id="intro" class="text-center mb-24 scroll-mt-24">
+            <h2 class="text-4xl font-bold mb-4">🤔 이웃에게 물어봐!</h2>
+            <p class="text-lg text-gray-600 max-w-3xl mx-auto">
+                새로 전학 온 친구가 어떤 동아리에 가입할지 궁금하다면, 그 친구와 어울리는 다른 친구들의 관심사를 살펴보겠죠? KNN(K-Nearest Neighbors) 알고리즘은 바로 이 아이디어에서 출발해요. 새로운 데이터가 주어졌을 때, 가장 가까운 'K'개의 이웃 데이터를 보고 정체를 예측하는 가장 직관적인 머신러닝 방법 중 하나랍니다.
+            </p>
+            <div class="mt-12 p-8 bg-white rounded-xl shadow-lg">
+                <h3 class="text-2xl font-bold mb-4">KNN의 핵심 원리 한눈에 보기</h3>
+                <p class="text-gray-600 mb-6">아래 그림에서 회색 점은 어떤 색깔일까요? 주변의 가장 가까운 이웃들을 살펴보세요!</p>
+                <canvas id="introCanvas" class="interactive-canvas mx-auto" width="500" height="300"></canvas>
+            </div>
+        </section>
+
+        <hr class="my-16 border-gray-200">
+
+        <section id="find-k" class="mb-24 scroll-mt-24">
+            <h2 class="text-3xl font-bold text-center mb-4">🎯 K를 찾아라! 가장 중요한 첫걸음</h2>
+            <p class="text-lg text-gray-600 text-center max-w-3xl mx-auto mb-12">
+                'K'는 몇 명의 이웃에게 물어볼지를 정하는 숫자예요. K값에 따라 예측 결과가 크게 달라지기 때문에 '최적의 K'를 찾는 것이 매우 중요하죠. 아래 슬라이더를 움직여 K값의 변화에 따른 결정 경계의 변화를 직접 확인해보세요.
+            </p>
+            <div class="grid md:grid-cols-2 gap-8 items-center">
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <div class="flex justify-between items-center mb-4">
+                        <label for="k-slider" class="font-bold text-lg">K 값 조절하기: <span id="k-value-display" class="text-blue-600">5</span></label>
+                        <span id="k-description" class="text-sm font-semibold p-2 rounded-md bg-blue-100 text-blue-800">균형</span>
+                    </div>
+                    <input id="k-slider" type="range" min="1" max="25" value="5" step="2" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <canvas id="k-canvas" class="interactive-canvas mt-4" width="400" height="400"></canvas>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                     <h3 class="text-xl font-bold text-center mb-4">"엘보우 메소드": 최적의 K 찾기</h3>
+                     <p class="text-gray-600 text-center mb-4">일반적으로 K가 커질수록 모델의 에러율은 감소하다가, 특정 지점부터 다시 증가하거나 변화가 둔해져요. 이 꺾이는 지점(Elbow Point)이 최적의 K 후보가 됩니다.</p>
+                    <div class="chart-container">
+                        <canvas id="elbow-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-gray-200">
+
+        <section id="distance" class="mb-24 scroll-mt-24">
+            <h2 class="text-3xl font-bold text-center mb-4">📏 거리를 재는 두 가지 방법</h2>
+            <p class="text-lg text-gray-600 text-center max-w-3xl mx-auto mb-12">
+                '가깝다'는 건 어떻게 알 수 있을까요? 데이터 사이의 거리를 재는 '자'가 필요해요. 가장 대표적인 두 가지 방법을 비교해봅시다.
+            </p>
+            <div class="bg-white p-8 rounded-xl shadow-lg">
+                <div class="flex justify-center space-x-4 mb-6">
+                    <button id="euclidean-btn" class="distance-btn px-6 py-2 bg-teal-500 text-white rounded-full shadow-md">유클리드 거리</button>
+                    <button id="manhattan-btn" class="distance-btn px-6 py-2 bg-gray-300 text-gray-800 rounded-full">맨해튼 거리</button>
+                </div>
+                <div class="grid md:grid-cols-2 gap-8 items-center">
+                    <canvas id="distance-canvas" class="interactive-canvas" width="400" height="300"></canvas>
+                    <div id="distance-explanation" class="text-center">
+                        <h3 class="text-2xl font-bold mb-2 text-teal-600">유클리드 거리</h3>
+                        <p class="text-gray-600">"새가 날아가는 길"처럼 두 점 사이의 가장 짧은 직선거리를 계산해요. 가장 일반적이고 직관적인 방법이죠.</p>
+                        <p class="font-mono text-lg mt-4 bg-gray-100 p-4 rounded-md">거리 = <span id="distance-value" class="font-bold">5.00</span></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <hr class="my-16 border-gray-200">
+
+        <section id="scaling" class="mb-24 scroll-mt-24">
+            <h2 class="text-3xl font-bold text-center mb-4">⚖️ 공평한 운동장 만들기 (데이터 스케일링)</h2>
+            <p class="text-lg text-gray-600 text-center max-w-3xl mx-auto mb-12">
+                만약 '키(cm)'와 '연봉(만원)'으로 이웃을 찾는다면, 단위가 훨씬 큰 연봉이 거리 계산을 독차지해버릴 거예요. 데이터 스케일링은 모든 특성들이 공평하게 거리에 반영되도록 단위를 맞춰주는 필수 과정입니다.
+            </p>
+            <div class="bg-white p-8 rounded-xl shadow-lg text-center">
+                <button id="scaling-btn" class="px-8 py-3 bg-orange-500 text-white rounded-full shadow-lg hover:bg-orange-600 transition mb-6">스케일링 적용하기!</button>
+                <canvas id="scaling-canvas" class="interactive-canvas mx-auto" width="600" height="400"></canvas>
+                <p id="scaling-text" class="mt-4 text-gray-600 font-semibold">현재 데이터: 키(150-200)와 시험 점수(0-1000). 거리 계산이 시험 점수에 의해 좌우됩니다.</p>
+            </div>
+        </section>
+
+        <hr class="my-16 border-gray-200">
+
+        <section id="decision" class="mb-24 scroll-mt-24">
+            <h2 class="text-3xl font-bold text-center mb-4">🗳️ 그래서, 최종 결정은 어떻게?</h2>
+            <p class="text-lg text-gray-600 text-center max-w-3xl mx-auto mb-12">
+                KNN은 이웃을 찾은 뒤, 문제의 종류에 따라 다른 방식으로 최종 결정을 내립니다.
+            </p>
+            <div class="bg-white p-8 rounded-xl shadow-lg">
+                <div class="flex justify-center border-b mb-8">
+                    <button class="tab active py-4 px-6 text-lg" data-tab="classification">분류 (Classification)</button>
+                    <button class="tab py-4 px-6 text-lg text-gray-500" data-tab="regression">회귀 (Regression)</button>
+                </div>
+                <div id="classification-content" class="tab-content">
+                    <h3 class="text-2xl font-bold text-center mb-2">다수결 투표! 🗳️</h3>
+                    <p class="text-gray-600 text-center max-w-2xl mx-auto mb-6">새로운 데이터의 정체는 이웃들이 가장 많이 속한 그룹으로 결정돼요. K=5일 때, 파란색 이웃이 3명, 빨간색 이웃이 2명이라면 새로운 데이터는 '파란색'으로 분류됩니다.</p>
+                    <canvas id="classification-canvas" class="interactive-canvas mx-auto" width="500" height="300"></canvas>
+                </div>
+                <div id="regression-content" class="tab-content hidden">
+                    <h3 class="text-2xl font-bold text-center mb-2">평균 내기! 📊</h3>
+                    <p class="text-gray-600 text-center max-w-2xl mx-auto mb-6">집값이나 시험 점수처럼 숫자를 예측할 땐, 이웃들의 숫자 값의 평균을 내서 예측해요. 이웃집들의 가격이 3억, 3.2억, 2.8억이라면, 새 집의 예측 가격은 평균인 3억이 됩니다.</p>
+                    <canvas id="regression-canvas" class="interactive-canvas mx-auto" width="500" height="300"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-gray-200">
+
+        <section id="cases" class="mb-24 scroll-mt-24">
+            <h2 class="text-3xl font-bold text-center mb-4">🌍 실생활에서는 어떻게 쓰일까?</h2>
+            <p class="text-lg text-gray-600 text-center max-w-3xl mx-auto mb-12">
+                KNN은 우리 주변의 다양한 문제를 해결하는 데 사용되고 있어요.
+            </p>
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <div class="card bg-white p-6 rounded-xl shadow-lg text-center">
+                    <div class="text-4xl mb-4">🩺</div>
+                    <h3 class="text-xl font-bold mb-2">의료 진단 (분류)</h3>
+                    <p class="text-gray-600">새로운 환자의 임상 데이터(나이, 혈압 등)를 과거 환자들과 비교해 '고위험군'/'저위험군'으로 분류해요.</p>
+                </div>
+                <div class="card bg-white p-6 rounded-xl shadow-lg text-center">
+                    <div class="text-4xl mb-4">🎬</div>
+                    <h3 class="text-xl font-bold mb-2">영화 추천 (분류)</h3>
+                    <p class="text-gray-600">나와 영화 취향이 비슷한 '이웃' 사용자들을 찾아, 그들이 좋아했지만 나는 아직 안 본 영화를 추천해줘요.</p>
+                </div>
+                <div class="card bg-white p-6 rounded-xl shadow-lg text-center">
+                    <div class="text-4xl mb-4">🏠</div>
+                    <h3 class="text-xl font-bold mb-2">부동산 가격 예측 (회귀)</h3>
+                    <p class="text-gray-600">새로 나온 집과 면적, 위치, 방 개수 등이 비슷한 '이웃' 집들의 실제 거래 가격 평균을 내어 가격을 예측해요.</p>
+                </div>
+                <div class="card bg-white p-6 rounded-xl shadow-lg text-center">
+                    <div class="text-4xl mb-4">🌾</div>
+                    <h3 class="text-xl font-bold mb-2">농작물 수확량 예측 (회귀)</h3>
+                    <p class="text-gray-600">토양, 강수량 등 환경이 유사했던 과거 '이웃' 농지들의 수확량 평균을 구해 올해 수확량을 예측해요.</p>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-gray-200">
+
+        <section id="conclusion" class="scroll-mt-24">
+            <h2 class="text-3xl font-bold text-center mb-12">👍 최종 정리: KNN의 장점과 한계 👎</h2>
+            <div class="max-w-4xl mx-auto grid md:grid-cols-2 gap-8">
+                <div class="bg-green-50 border-l-4 border-green-500 p-6 rounded-r-lg">
+                    <h3 class="text-2xl font-bold mb-4 text-green-800">강점 (이럴 때 좋아요!)</h3>
+                    <ul class="space-y-3 text-green-700">
+                        <li><strong>👍 단순하고 직관적:</strong> 이해하고 설명하기가 매우 쉬워요.</li>
+                        <li><strong>🚀 빠른 학습:</strong> 별도의 훈련 과정 없이 데이터를 저장만 하면 되므로 시작이 빨라요.</li>
+                        <li><strong>✨ 유연함:</strong> 분류와 회귀 문제 모두에 사용할 수 있고, 복잡한 데이터 패턴도 잘 찾아내요.</li>
+                    </ul>
+                </div>
+                <div class="bg-red-50 border-l-4 border-red-500 p-6 rounded-r-lg">
+                    <h3 class="text-2xl font-bold mb-4 text-red-800">한계 (이럴 땐 조심!)</h3>
+                    <ul class="space-y-3 text-red-700">
+                        <li><strong>🐢 느린 예측:</strong> 데이터가 많아지면 모든 데이터와 거리를 계산해야 해서 예측이 매우 느려져요.</li>
+                        <li><strong>💾 많은 메모리:</strong> 모든 데이터를 통째로 저장해야 해서 메모리를 많이 차지해요.</li>
+                        <li><strong>😵 차원의 저주:</strong> 특성(차원)이 너무 많아지면 거리 계산이 무의미해져 성능이 급격히 떨어져요.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-gray-800 text-white text-center p-4 mt-16">
+        <p>대화형 KNN 학습 페이지</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            const drawPoint = (ctx, x, y, color, size = 5) => {
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fill();
+            };
+
+            const drawText = (ctx, text, x, y, color = 'black', font = '12px sans-serif') => {
+                ctx.fillStyle = color;
+                ctx.font = font;
+                ctx.fillText(text, x, y);
+            }
+
+            const introCanvas = document.getElementById('introCanvas');
+            if (introCanvas) {
+                const ctx = introCanvas.getContext('2d');
+                const points = [
+                    { x: 50, y: 50, color: '#ef4444' }, { x: 80, y: 90, color: '#ef4444' },
+                    { x: 120, y: 60, color: '#ef4444' }, { x: 70, y: 120, color: '#ef4444' },
+                    { x: 350, y: 200, color: '#3b82f6' }, { x: 400, y: 250, color: '#3b82f6' },
+                    { x: 420, y: 180, color: '#3b82f6' }, { x: 380, y: 220, color: '#3b82f6' },
+                ];
+                const unknownPoint = { x: 250, y: 150, color: '#6b7280' };
+                points.forEach(p => drawPoint(ctx, p.x, p.y, p.color, 8));
+                drawPoint(ctx, unknownPoint.x, unknownPoint.y, unknownPoint.color, 10);
+                drawText(ctx, '?', unknownPoint.x - 4, unknownPoint.y + 4, 'white', 'bold 14px sans-serif');
+            }
+
+            const kSlider = document.getElementById('k-slider');
+            const kValueDisplay = document.getElementById('k-value-display');
+            const kDescription = document.getElementById('k-description');
+            const kCanvas = document.getElementById('k-canvas');
+            if (kCanvas) {
+                const ctx = kCanvas.getContext('2d');
+                const width = kCanvas.width;
+                const height = kCanvas.height;
+                const points = [];
+                for (let i = 0; i < 30; i++) {
+                    const x = Math.random() * width;
+                    const y = Math.random() * height;
+                    const color = (x + y < width) ? '#ef4444' : '#3b82f6';
+                    points.push({ x, y, color });
+                }
+
+                const drawKCanvas = () => {
+                    const k = parseInt(kSlider.value);
+                    kValueDisplay.textContent = k;
+
+                    if (k <= 3) {
+                        kDescription.textContent = '과적합 위험';
+                        kDescription.className = 'text-sm font-semibold p-2 rounded-md bg-red-100 text-red-800';
+                    } else if (k >= 15) {
+                        kDescription.textContent = '과소적합 위험';
+                        kDescription.className = 'text-sm font-semibold p-2 rounded-md bg-yellow-100 text-yellow-800';
+                    } else {
+                        kDescription.textContent = '균형';
+                        kDescription.className = 'text-sm font-semibold p-2 rounded-md bg-blue-100 text-blue-800';
+                    }
+
+                    ctx.clearRect(0, 0, width, height);
+                    
+                    for (let x = 0; x < width; x += 10) {
+                        for (let y = 0; y < height; y += 10) {
+                            const distances = points.map(p => ({
+                                dist: Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2)),
+                                color: p.color
+                            }));
+                            distances.sort((a, b) => a.dist - b.dist);
+                            const neighbors = distances.slice(0, k);
+                            const redCount = neighbors.filter(n => n.color === '#ef4444').length;
+                            const blueCount = neighbors.filter(n => n.color === '#3b82f6').length;
+                            const bgColor = redCount > blueCount ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)';
+                            ctx.fillStyle = bgColor;
+                            ctx.fillRect(x, y, 10, 10);
+                        }
+                    }
+                    points.forEach(p => drawPoint(ctx, p.x, p.y, p.color, 4));
+                };
+                kSlider.addEventListener('input', drawKCanvas);
+                drawKCanvas();
+            }
+
+            const elbowChartCtx = document.getElementById('elbow-chart')?.getContext('2d');
+            if (elbowChartCtx) {
+                const kValues = Array.from({length: 13}, (_, i) => i * 2 + 1);
+                const errorRates = [0.5, 0.3, 0.15, 0.1, 0.08, 0.09, 0.1, 0.11, 0.12, 0.12, 0.13, 0.14, 0.14];
+                new Chart(elbowChartCtx, {
+                    type: 'line',
+                    data: {
+                        labels: kValues,
+                        datasets: [{
+                            label: '모델 에러율',
+                            data: errorRates,
+                            borderColor: '#E8A87C',
+                            backgroundColor: 'rgba(232, 168, 124, 0.2)',
+                            tension: 0.1,
+                            fill: true,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: { display: false },
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: { title: { display: true, text: 'K 값' } },
+                            y: { title: { display: true, text: '에러율' } }
+                        }
+                    }
+                });
+            }
+
+            const distanceCanvas = document.getElementById('distance-canvas');
+            if (distanceCanvas) {
+                const ctx = distanceCanvas.getContext('2d');
+                const p1 = { x: 50, y: 250 };
+                const p2 = { x: 350, y: 50 };
+                const explanation = document.getElementById('distance-explanation');
+                const valueSpan = document.getElementById('distance-value');
+
+                const drawDistance = (type) => {
+                    ctx.clearRect(0, 0, distanceCanvas.width, distanceCanvas.height);
+                    drawPoint(ctx, p1.x, p1.y, '#3b82f6', 8);
+                    drawText(ctx, 'A', p1.x - 5, p1.y - 15);
+                    drawPoint(ctx, p2.x, p2.y, '#ef4444', 8);
+                    drawText(ctx, 'B', p2.x - 5, p2.y - 15);
+
+                    ctx.strokeStyle = '#A8D8EA';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    if (type === 'euclidean') {
+                        ctx.moveTo(p1.x, p1.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        explanation.querySelector('h3').textContent = '유클리드 거리';
+                        explanation.querySelector('h3').style.color = '#0d9488';
+                        explanation.querySelector('p').textContent = '"새가 날아가는 길"처럼 두 점 사이의 가장 짧은 직선거리를 계산해요. 가장 일반적이고 직관적인 방법이죠.';
+                        const dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+                        valueSpan.textContent = (dist / 50).toFixed(2);
+                    } else {
+                        ctx.moveTo(p1.x, p1.y);
+                        ctx.lineTo(p2.x, p1.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        explanation.querySelector('h3').textContent = '맨해튼 거리';
+                        explanation.querySelector('h3').style.color = '#52525b';
+                        explanation.querySelector('p').textContent = '"도시 블록"처럼 격자를 따라 이동하는 거리를 계산해요. 가로, 세로 이동 거리의 합이죠.';
+                        const dist = Math.abs(p2.x - p1.x) + Math.abs(p2.y - p1.y);
+                        valueSpan.textContent = (dist / 50).toFixed(2);
+                    }
+                    ctx.stroke();
+                };
+
+                document.getElementById('euclidean-btn').addEventListener('click', (e) => {
+                    drawDistance('euclidean');
+                    document.querySelectorAll('.distance-btn').forEach(b => b.classList.remove('bg-teal-500', 'text-white', 'bg-gray-300', 'text-gray-800'));
+                    e.target.classList.add('bg-teal-500', 'text-white');
+                    document.getElementById('manhattan-btn').classList.add('bg-gray-300', 'text-gray-800');
+                });
+                document.getElementById('manhattan-btn').addEventListener('click', (e) => {
+                    drawDistance('manhattan');
+                    document.querySelectorAll('.distance-btn').forEach(b => b.classList.remove('bg-teal-500', 'text-white', 'bg-gray-300', 'text-gray-800'));
+                    e.target.classList.add('bg-teal-500', 'text-white');
+                    document.getElementById('euclidean-btn').classList.add('bg-gray-300', 'text-gray-800');
+                });
+
+                drawDistance('euclidean');
+            }
+            
+            const scalingCanvas = document.getElementById('scaling-canvas');
+            if (scalingCanvas) {
+                const ctx = scalingCanvas.getContext('2d');
+                const width = scalingCanvas.width;
+                const height = scalingCanvas.height;
+                const scalingText = document.getElementById('scaling-text');
+                let isScaled = false;
+                
+                const originalData = Array.from({length: 50}, () => ({
+                    x: 150 + Math.random() * 50, // 키 150-200
+                    y: Math.random() * 1000 // 점수 0-1000
+                }));
+
+                const drawScaling = () => {
+                    ctx.clearRect(0, 0, width, height);
+                    ctx.strokeStyle = '#cbd5e1';
+                    ctx.strokeRect(0, 0, width, height);
+                    
+                    const dataToDraw = isScaled 
+                        ? originalData.map(p => ({
+                            x: (p.x - 150) / 50,
+                            y: p.y / 1000
+                          }))
+                        : originalData;
+                    
+                    const xRange = isScaled ? 1 : 1000;
+                    const yRange = isScaled ? 1 : 1000;
+                    const xOffset = isScaled ? 0 : 150;
+
+                    dataToDraw.forEach(p => {
+                        const canvasX = ((isScaled ? p.x : p.x - xOffset) / (isScaled ? xRange : 50)) * (width - 40) + 20;
+                        const canvasY = height - (((isScaled ? p.y : p.y) / yRange) * (height - 40) + 20);
+                        drawPoint(ctx, canvasX, canvasY, '#fb923c', 4);
+                    });
+
+                    // Draw axes
+                    ctx.fillStyle = '#333';
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText(isScaled ? '정규화된 키' : '키 (150-200cm)', width / 2 - 30, height - 5);
+                    ctx.save();
+                    ctx.rotate(-Math.PI / 2);
+                    ctx.textAlign = 'center';
+                    ctx.fillText(isScaled ? '정규화된 점수' : '시험 점수 (0-1000점)', -height / 2, 15);
+                    ctx.restore();
+                };
+
+                document.getElementById('scaling-btn').addEventListener('click', () => {
+                    isScaled = !isScaled;
+                    drawScaling();
+                    if(isScaled) {
+                        scalingText.textContent = '스케일링 적용 후: 모든 특성이 0과 1 사이의 값을 가집니다. 이제 공평하게 거리를 계산할 수 있어요!';
+                    } else {
+                        scalingText.textContent = '현재 데이터: 키(150-200)와 시험 점수(0-1000). 거리 계산이 시험 점수에 의해 좌우됩니다.';
+                    }
+                });
+                drawScaling();
+            }
+
+            const tabs = document.querySelectorAll('.tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    const target = tab.getAttribute('data-tab');
+                    tabContents.forEach(c => {
+                        if (c.id === `${target}-content`) {
+                            c.classList.remove('hidden');
+                        } else {
+                            c.classList.add('hidden');
+                        }
+                    });
+                });
+            });
+
+            const classificationCanvas = document.getElementById('classification-canvas');
+            if (classificationCanvas) {
+                const ctx = classificationCanvas.getContext('2d');
+                const points = [
+                    { x: 50, y: 50, color: '#ef4444' }, { x: 80, y: 90, color: '#ef4444' },
+                    { x: 420, y: 180, color: '#3b82f6' }, { x: 380, y: 220, color: '#3b82f6' }, { x: 450, y: 250, color: '#3b82f6' }
+                ];
+                const unknown = { x: 250, y: 150 };
+                points.forEach(p => drawPoint(ctx, p.x, p.y, p.color, 8));
+                drawPoint(ctx, unknown.x, unknown.y, '#6b7280', 10);
+                
+                ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 5]);
+                points.forEach(p => {
+                    ctx.beginPath();
+                    ctx.moveTo(unknown.x, unknown.y);
+                    ctx.lineTo(p.x, p.y);
+                    ctx.stroke();
+                });
+            }
+
+            const regressionCanvas = document.getElementById('regression-canvas');
+            if (regressionCanvas) {
+                const ctx = regressionCanvas.getContext('2d');
+                const points = [
+                    { x: 50, y: 100, value: 85 }, { x: 150, y: 50, value: 95 },
+                    { x: 200, y: 250, value: 90 }, { x: 400, y: 80, value: 92 }, { x: 450, y: 200, value: 88 }
+                ];
+                const unknown = { x: 250, y: 150 };
+                const k = 3;
+                
+                const distances = points.map(p => ({
+                    ...p,
+                    dist: Math.sqrt(Math.pow(p.x - unknown.x, 2) + Math.pow(p.y - unknown.y, 2))
+                }));
+                distances.sort((a, b) => a.dist - b.dist);
+                const neighbors = distances.slice(0, k);
+                const avg = neighbors.reduce((sum, p) => sum + p.value, 0) / k;
+
+                points.forEach(p => {
+                    drawPoint(ctx, p.x, p.y, '#a8a29e', 8);
+                    drawText(ctx, p.value, p.x + 10, p.y + 5);
+                });
+                
+                neighbors.forEach(p => {
+                    drawPoint(ctx, p.x, p.y, '#16a34a', 8);
+                    ctx.strokeStyle = 'rgba(22, 163, 74, 0.5)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    ctx.moveTo(unknown.x, unknown.y);
+                    ctx.lineTo(p.x, p.y);
+                    ctx.stroke();
+                });
+                
+                drawPoint(ctx, unknown.x, unknown.y, '#6b7280', 10);
+                drawText(ctx, `? (예측: ${avg.toFixed(1)})`, unknown.x - 30, unknown.y - 15, 'black', 'bold 14px sans-serif');
+            }
+            
+            const navLinks = document.querySelectorAll('.nav-button');
+            const sections = document.querySelectorAll('section');
+
+            window.addEventListener('scroll', () => {
+                let current = '';
+                sections.forEach(section => {
+                    const sectionTop = section.offsetTop;
+                    if (pageYOffset >= sectionTop - 120) {
+                        current = section.getAttribute('id');
+                    }
+                });
+
+                navLinks.forEach(link => {
+                    link.classList.remove('active');
+                    if (link.getAttribute('href') === `#${current}`) {
+                        link.classList.add('active');
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
